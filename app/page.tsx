@@ -89,7 +89,7 @@ type AgentProfile = {
 type CallStatus = "idle" | "ringing" | "connected" | "error";
 type KnowledgeEntry = Record<string, unknown> & { id: string };
 type PanelId = "transcript" | "customer" | "suggestions";
-type TabId = "dashboard" | "call-history" | "dialpad" | "knowledge-base" | "profile";
+type TabId = "dashboard" | "call-history" | "dialpad" | "knowledge-base" | "analytics" | "profile";
 
 // ── SVG Icons ─────────────────────────────────────────────────
 const IconGrid = () => (
@@ -166,6 +166,12 @@ const IconUser = () => (
     <circle cx="12" cy="7" r="4"/>
   </svg>
 );
+const IconBarChart = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+    <line x1="2" y1="20" x2="22" y2="20"/>
+  </svg>
+);
 
 // ── Helpers ───────────────────────────────────────────────────
 const normalizeText = (v?: string | null) => v?.trim() || null;
@@ -234,6 +240,7 @@ const NAV_TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "call-history",   label: "Call History",   icon: <IconPhone /> },
   { id: "dialpad",        label: "Dialpad",        icon: <IconDialpad /> },
   { id: "knowledge-base", label: "Knowledge Base", icon: <IconBook /> },
+  { id: "analytics",      label: "Analytics",      icon: <IconBarChart /> },
   { id: "profile",        label: "My Profile",     icon: <IconUser /> },
 ];
 
@@ -248,6 +255,7 @@ export default function Dashboard() {
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [recordings, setRecordings]         = useState<Recording[]>([]);
   const [recordingsLoading, setRecordingsLoading] = useState(false);
+  const [callQueryAddressed, setCallQueryAddressed] = useState<Record<string, boolean>>({});
 
   // Softphone
   const [callStatus, setCallStatus]         = useState<CallStatus>("idle");
@@ -410,6 +418,27 @@ export default function Dashboard() {
 
   // ── Effects ─────────────────────────────────────────────────
   useEffect(() => { fetchCalls(); }, []);
+
+  useEffect(() => {
+    const fetchQueryAddressedMap = async () => {
+      const [{ data: userRows, error: userErr }, { data: agentRows, error: agentErr }] = await Promise.all([
+        supabase.from("messages").select("call_id").eq("role", "user"),
+        supabase.from("messages").select("call_id").eq("role", "agent"),
+      ]);
+      if (userErr || agentErr) {
+        console.error("fetchQueryAddressedMap:", userErr?.message || agentErr?.message);
+        return;
+      }
+
+      const userCallIds = new Set((userRows || []).map((r: any) => r.call_id));
+      const agentCallIds = new Set((agentRows || []).map((r: any) => r.call_id));
+      const next: Record<string, boolean> = {};
+      userCallIds.forEach((callId) => { next[callId] = agentCallIds.has(callId); });
+      setCallQueryAddressed(next);
+    };
+
+    fetchQueryAddressedMap();
+  }, [calls]);
 
   useEffect(() => {
     if (!selectedCall) { setSuggestions([]); setMessages([]); setCallSummary(null); setRecordings([]); return; }
@@ -691,6 +720,19 @@ export default function Dashboard() {
 
   // ── Derived values ──────────────────────────────────────────
   const selectedCallData  = calls.find((c) => c.id === selectedCall) || null;
+
+  // Analytics
+  const totalCalls        = calls.length;
+  const droppedCalls      = calls.filter((c) => callQueryAddressed[c.id] === false).length;
+  const ivrCalls          = calls.filter((c) => !!c.ivr_category).length;
+  const directCalls       = totalCalls - ivrCalls;
+  const droppedInIvr      = calls.filter((c) => c.status === "ivr").length;
+  const ivrPct            = totalCalls > 0 ? Math.round((ivrCalls / totalCalls) * 100) : 0;
+  const ivrCategoryCounts = calls.reduce<Record<string, number>>((acc, c) => {
+    if (c.ivr_category) acc[c.ivr_category] = (acc[c.ivr_category] || 0) + 1;
+    return acc;
+  }, {});
+  const maxCategoryCount  = Math.max(...Object.values(ivrCategoryCounts), 1);
   const customerMsgCount  = messages.filter((m) => m.role === "user").length;
   const agentMsgCount     = messages.filter((m) => m.role === "agent").length;
   const ivrQuery          = messages.find((m) => m.role === "user")?.content || null;
@@ -1409,6 +1451,116 @@ export default function Dashboard() {
                   );
                 })}
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Analytics Tab ── */}
+        <div className={`tab-view analytics-view${activeTab === "analytics" ? " active" : ""}`}>
+          <div className="analytics-container">
+
+            {/* Stat Cards */}
+            <div className="analytics-stats-grid">
+              <div className="analytics-stat-card">
+                <span className="analytics-stat-label">Total Calls Handled</span>
+                <strong className="analytics-stat-value">{totalCalls}</strong>
+              </div>
+              <div className="analytics-stat-card dropped">
+                <span className="analytics-stat-label">Dropped Calls</span>
+                <strong className="analytics-stat-value">{droppedCalls}</strong>
+                {totalCalls > 0 && <span className="analytics-stat-pct">{Math.round(droppedCalls / totalCalls * 100)}% of total</span>}
+              </div>
+              <div className="analytics-stat-card ivr">
+                <span className="analytics-stat-label">IVR Routed</span>
+                <strong className="analytics-stat-value">{ivrCalls}</strong>
+                {totalCalls > 0 && <span className="analytics-stat-pct">{ivrPct}% of total</span>}
+              </div>
+              <div className="analytics-stat-card warn">
+                <span className="analytics-stat-label">Dropped in IVR</span>
+                <strong className="analytics-stat-value">{droppedInIvr}</strong>
+                {totalCalls > 0 && <span className="analytics-stat-pct">{Math.round(droppedInIvr / totalCalls * 100)}% of total</span>}
+              </div>
+            </div>
+
+            {/* Charts Row */}
+            <div className="analytics-charts-row">
+
+              {/* IVR Category Bar Chart */}
+              <div className="analytics-card">
+                <h3 className="analytics-card-title">Calls by IVR Category</h3>
+                {Object.keys(ivrCategoryCounts).length === 0 ? (
+                  <div className="analytics-empty">No IVR category data yet.</div>
+                ) : (
+                  <div className="analytics-bars">
+                    {Object.entries(ivrCategoryCounts).map(([cat, count]) => (
+                      <div key={cat} className="analytics-bar-row">
+                        <span className="analytics-bar-label">{IVR_CATEGORY_CFG[cat]?.label || cat}</span>
+                        <div className="analytics-bar-track">
+                          <div className="analytics-bar-fill" style={{ width: `${Math.round((count / maxCategoryCount) * 100)}%` }} />
+                        </div>
+                        <span className="analytics-bar-count">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* IVR vs Agent Donut */}
+              <div className="analytics-card">
+                <h3 className="analytics-card-title">IVR vs Direct Resolution</h3>
+                {totalCalls === 0 ? (
+                  <div className="analytics-empty">No call data yet.</div>
+                ) : (
+                  <div className="analytics-donut-wrap">
+                    <div
+                      className="analytics-donut-ring"
+                      style={{ background: `conic-gradient(#0f9ed5 0% ${ivrPct}%, rgba(233,113,50,0.9) ${ivrPct}% 100%)` }}
+                    >
+                      <div className="analytics-donut-hole">
+                        <strong>{totalCalls}</strong>
+                        <span>Calls</span>
+                      </div>
+                    </div>
+                    <div className="analytics-donut-legend">
+                      <div className="analytics-legend-row">
+                        <span className="analytics-legend-dot ivr-dot" />
+                        <span>IVR Routed</span>
+                        <strong>{ivrCalls}</strong>
+                      </div>
+                      <div className="analytics-legend-row">
+                        <span className="analytics-legend-dot agent-dot" />
+                        <span>Direct / Agent</span>
+                        <strong>{directCalls}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Call Status Breakdown */}
+              <div className="analytics-card">
+                <h3 className="analytics-card-title">Call Status Breakdown</h3>
+                {totalCalls === 0 ? (
+                  <div className="analytics-empty">No call data yet.</div>
+                ) : (
+                  <div className="analytics-bars">
+                    {[
+                      { label: "Active",       count: calls.filter((c) => c.status === "active").length,       cls: "active-bar"  },
+                      { label: "Disconnected", count: calls.filter((c) => c.status === "disconnected").length, cls: "dropped-bar" },
+                      { label: "In IVR",       count: calls.filter((c) => c.status === "ivr").length,          cls: "ivr-bar"     },
+                    ].map(({ label, count, cls }) => (
+                      <div key={label} className="analytics-bar-row">
+                        <span className="analytics-bar-label">{label}</span>
+                        <div className="analytics-bar-track">
+                          <div className={`analytics-bar-fill ${cls}`} style={{ width: `${Math.round((count / totalCalls) * 100)}%` }} />
+                        </div>
+                        <span className="analytics-bar-count">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         </div>
