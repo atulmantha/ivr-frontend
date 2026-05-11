@@ -452,6 +452,18 @@ export default function Dashboard() {
     if (activeTab === "knowledge-base") fetchKbEntries();
   }, [activeTab]);
 
+  // When this agent's visible call list changes, deselect any call that's no
+  // longer in scope (e.g., a billing call was auto-selected for a general agent).
+  useEffect(() => {
+    if (!agentProfile?.department) return; // department not loaded yet
+    if (!selectedCall) return;
+    if (!calls.some((c) => c.id === selectedCall && (!agentDeptCategories || !c.ivr_category || agentDeptCategories.includes(c.ivr_category)))) {
+      const fallback = calls.find((c) => !agentDeptCategories || !c.ivr_category || agentDeptCategories.includes(c.ivr_category));
+      setSelectedCall(fallback?.id ?? null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calls, agentProfile?.department]);
+
   // Auto-scroll suggestions to bottom when new one arrives
   useEffect(() => {
     const el = suggestionsListRef.current;
@@ -719,16 +731,34 @@ export default function Dashboard() {
   };
 
   // ── Derived values ──────────────────────────────────────────
+
+  // Map logged-in agent's department to the IVR categories they handle.
+  // Mirrors the categoryToAgentIdentity mapping on the backend.
+  const dept = agentProfile?.department ?? null;
+  const agentDeptCategories: string[] | null =
+    dept === "Billing"           ? ["billing"] :
+    dept === "Technical Support" ? ["service", "new_connection"] :
+    dept === "Sales"             ? ["service", "new_connection"] :
+    dept === "Customer Success"  ? ["service", "new_connection"] :
+    dept === "General"           ? ["general"] :
+    null; // null = show all (admin or department not yet loaded)
+
+  // Calls visible to this agent: only those matching their department category.
+  // Calls with no category yet (still in IVR flow) are shown to all agents.
+  const visibleCalls = agentDeptCategories
+    ? calls.filter((c) => !c.ivr_category || agentDeptCategories.includes(c.ivr_category))
+    : calls;
+
   const selectedCallData  = calls.find((c) => c.id === selectedCall) || null;
 
-  // Analytics
-  const totalCalls        = calls.length;
-  const droppedCalls      = calls.filter((c) => callQueryAddressed[c.id] === false).length;
-  const ivrCalls          = calls.filter((c) => !!c.ivr_category).length;
+  // Analytics — computed from visibleCalls so each agent only sees their own data
+  const totalCalls        = visibleCalls.length;
+  const droppedCalls      = visibleCalls.filter((c) => callQueryAddressed[c.id] === false).length;
+  const ivrCalls          = visibleCalls.filter((c) => !!c.ivr_category).length;
   const directCalls       = totalCalls - ivrCalls;
-  const droppedInIvr      = calls.filter((c) => c.status === "ivr").length;
+  const droppedInIvr      = visibleCalls.filter((c) => c.status === "ivr").length;
   const ivrPct            = totalCalls > 0 ? Math.round((ivrCalls / totalCalls) * 100) : 0;
-  const ivrCategoryCounts = calls.reduce<Record<string, number>>((acc, c) => {
+  const ivrCategoryCounts = visibleCalls.reduce<Record<string, number>>((acc, c) => {
     if (c.ivr_category) acc[c.ivr_category] = (acc[c.ivr_category] || 0) + 1;
     return acc;
   }, {});
@@ -870,7 +900,13 @@ export default function Dashboard() {
                     {/* ── Transcript panel ── */}
                     {panelId === "transcript" && (
                       <div className="messages-wrap">
-                        {messages.length === 0 && (
+                        {selectedCallData?.status === "waiting" && (
+                          <div className="queue-waiting-notice">
+                            <span className="queue-waiting-icon">⏳</span>
+                            <p>Customer waiting for available agent.</p>
+                          </div>
+                        )}
+                        {messages.length === 0 && selectedCallData?.status !== "waiting" && (
                           <div className="empty-chat">No transcript yet. Waiting for the call to start.</div>
                         )}
                         {messages.map((msg) => {
@@ -1290,7 +1326,7 @@ export default function Dashboard() {
           <div className="call-metrics">
             <article className="metric-card">
               <span>Total Calls</span>
-              <strong>{calls.length}</strong>
+              <strong>{visibleCalls.length}</strong>
             </article>
             <article className="metric-card warm">
               <span>Turns</span>
@@ -1299,8 +1335,8 @@ export default function Dashboard() {
           </div>
 
           <div className="call-list">
-            {calls.length === 0 && <div className="empty-state">No call records found yet.</div>}
-            {calls.map((call) => {
+            {visibleCalls.length === 0 && <div className="empty-state">No call records found yet.</div>}
+            {visibleCalls.map((call) => {
               const name           = normalizeText(call.customer_name);
               const phone          = normalizeText(call.customer_phone);
               const tier           = normalizeText(call.tier);
@@ -1480,6 +1516,10 @@ export default function Dashboard() {
                 <strong className="analytics-stat-value">{droppedInIvr}</strong>
                 {totalCalls > 0 && <span className="analytics-stat-pct">{Math.round(droppedInIvr / totalCalls * 100)}% of total</span>}
               </div>
+              <div className="analytics-stat-card waiting">
+                <span className="analytics-stat-label">Waiting in Queue</span>
+                <strong className="analytics-stat-value">{visibleCalls.filter((c) => c.status === "waiting").length}</strong>
+              </div>
             </div>
 
             {/* Charts Row */}
@@ -1505,38 +1545,6 @@ export default function Dashboard() {
                 )}
               </div>
 
-              {/* IVR vs Agent Donut */}
-              <div className="analytics-card">
-                <h3 className="analytics-card-title">IVR vs Direct Resolution</h3>
-                {totalCalls === 0 ? (
-                  <div className="analytics-empty">No call data yet.</div>
-                ) : (
-                  <div className="analytics-donut-wrap">
-                    <div
-                      className="analytics-donut-ring"
-                      style={{ background: `conic-gradient(#0f9ed5 0% ${ivrPct}%, rgba(233,113,50,0.9) ${ivrPct}% 100%)` }}
-                    >
-                      <div className="analytics-donut-hole">
-                        <strong>{totalCalls}</strong>
-                        <span>Calls</span>
-                      </div>
-                    </div>
-                    <div className="analytics-donut-legend">
-                      <div className="analytics-legend-row">
-                        <span className="analytics-legend-dot ivr-dot" />
-                        <span>IVR Routed</span>
-                        <strong>{ivrCalls}</strong>
-                      </div>
-                      <div className="analytics-legend-row">
-                        <span className="analytics-legend-dot agent-dot" />
-                        <span>Direct / Agent</span>
-                        <strong>{directCalls}</strong>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               {/* Call Status Breakdown */}
               <div className="analytics-card">
                 <h3 className="analytics-card-title">Call Status Breakdown</h3>
@@ -1545,9 +1553,10 @@ export default function Dashboard() {
                 ) : (
                   <div className="analytics-bars">
                     {[
-                      { label: "Active",       count: calls.filter((c) => c.status === "active").length,       cls: "active-bar"  },
-                      { label: "Disconnected", count: calls.filter((c) => c.status === "disconnected").length, cls: "dropped-bar" },
-                      { label: "In IVR",       count: calls.filter((c) => c.status === "ivr").length,          cls: "ivr-bar"     },
+                      { label: "Active",       count: visibleCalls.filter((c) => c.status === "active").length,       cls: "active-bar"  },
+                      { label: "Disconnected", count: visibleCalls.filter((c) => c.status === "disconnected").length, cls: "dropped-bar" },
+                      { label: "In IVR",       count: visibleCalls.filter((c) => c.status === "ivr").length,          cls: "ivr-bar"     },
+                      { label: "Waiting",      count: visibleCalls.filter((c) => c.status === "waiting").length,      cls: "waiting-bar"  },
                     ].map(({ label, count, cls }) => (
                       <div key={label} className="analytics-bar-row">
                         <span className="analytics-bar-label">{label}</span>
