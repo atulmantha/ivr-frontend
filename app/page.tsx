@@ -364,7 +364,8 @@ export default function Dashboard() {
     if (error) console.error("fetchCalls:", error.message);
     const rows = data || [];
     setCalls(rows);
-    const newestId = rows[0]?.id ?? null;
+    const newestVisible = rows.find((r) => r.status === "connected" || r.status === "disconnected");
+    const newestId = newestVisible?.id ?? null;
     if (newestId && newestId !== latestCallIdRef.current) {
       latestCallIdRef.current = newestId;
       setSelectedCall(newestId);
@@ -458,9 +459,11 @@ export default function Dashboard() {
   useEffect(() => {
     if (!agentProfile?.department) return; // department not loaded yet
     if (!selectedCall) return;
-    if (!calls.some((c) => c.id === selectedCall && (!agentDeptCategories || !c.ivr_category || agentDeptCategories.includes(c.ivr_category)))) {
-      const fallback = calls.find((c) => !agentDeptCategories || !c.ivr_category || agentDeptCategories.includes(c.ivr_category));
-      setSelectedCall(fallback?.id ?? null);
+    const isVisible = (c: { id: string; status?: string | null; ivr_category?: string | null }) =>
+      (c.status === "connected" || c.status === "disconnected") &&
+      (!agentDeptCategories || !c.ivr_category || agentDeptCategories.includes(c.ivr_category));
+    if (!calls.some((c) => c.id === selectedCall && isVisible(c))) {
+      setSelectedCall(calls.find(isVisible)?.id ?? null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calls, agentProfile?.department]);
@@ -755,11 +758,11 @@ export default function Dashboard() {
     dept === "General"           ? ["general"] :
     null; // null = show all (admin or department not yet loaded)
 
-  // Calls visible to this agent: only those matching their department category.
-  // Calls with no category yet (still in IVR flow) are shown to all agents.
-  const visibleCalls = agentDeptCategories
-    ? calls.filter((c) => !c.ivr_category || agentDeptCategories.includes(c.ivr_category))
-    : calls;
+  // Only show calls that have an agent connected or are completed.
+  // Calls still in IVR, ringing, or waiting in queue are hidden until the agent joins.
+  const visibleCalls = calls
+    .filter((c) => c.status === "connected" || c.status === "disconnected")
+    .filter((c) => !agentDeptCategories || !c.ivr_category || agentDeptCategories.includes(c.ivr_category));
 
   const selectedCallData  = calls.find((c) => c.id === selectedCall) || null;
 
