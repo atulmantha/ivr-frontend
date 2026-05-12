@@ -256,8 +256,6 @@ export default function Dashboard() {
   const [recordings, setRecordings]         = useState<Recording[]>([]);
   const [recordingsLoading, setRecordingsLoading] = useState(false);
   const [callQueryAddressed, setCallQueryAddressed] = useState<Record<string, boolean>>({});
-  const [closingMessage, setClosingMessage]         = useState<string | null>(null);
-  const [closingLoading, setClosingLoading]         = useState(false);
 
   // Softphone
   const [callStatus, setCallStatus]         = useState<CallStatus>("idle");
@@ -410,19 +408,6 @@ export default function Dashboard() {
     }
   };
 
-  const fetchClosingMessage = async (callId: string) => {
-    setClosingLoading(true);
-    try {
-      const r = await fetch(`/api/closing-message?call_id=${callId}`);
-      if (r.ok) {
-        const { closing_message } = await r.json();
-        if (closing_message) setClosingMessage(closing_message);
-      }
-    } catch { /* non-critical */ } finally {
-      setClosingLoading(false);
-    }
-  };
-
   const fetchKbEntries = async () => {
     setKbEntriesLoading(true);
     setKbEntriesError(null);
@@ -458,14 +443,11 @@ export default function Dashboard() {
   }, [calls]);
 
   useEffect(() => {
-    setClosingMessage(null);
     if (!selectedCall) { setSuggestions([]); setMessages([]); setCallSummary(null); setRecordings([]); return; }
     fetchMessages(selectedCall);
     fetchSuggestions(selectedCall);
     fetchCallSummary(selectedCall);
     fetchRecordings(selectedCall);
-    const callStatus = calls.find((c) => c.id === selectedCall)?.status;
-    if (callStatus === "disconnected") fetchClosingMessage(selectedCall);
   }, [selectedCall]);
 
   useEffect(() => {
@@ -1267,23 +1249,30 @@ export default function Dashboard() {
                                   const eCfg = EMOTION_CFG[s.emotion] ?? EMOTION_CFG.calm;
                                   const pCfg = PRIORITY_CFG[s.priority] ?? PRIORITY_CFG.low;
                                   const isGreeting = s.intent === "call_greeting";
+                                  const isClosing  = s.intent === "call_closing";
                                   const isLatest   = i === suggestions.length - 1;
                                   return (
-                                    <div key={s.id} className={`suggestion-card suggestion-animate${isGreeting ? " greeting-card" : ""}`}>
-                                      {/* Header: index + time + emotion state */}
+                                    <div key={s.id} className={`suggestion-card suggestion-animate${isGreeting ? " greeting-card" : ""}${isClosing ? " closing-card" : ""}`}>
+                                      {/* Header */}
                                       <div className="suggestion-card-header">
-                                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                          <span className="suggestion-num">#{i + 1}</span>
-                                          <span className={`analysis-badge ${eCfg.cls}`} style={{ fontSize: "0.63rem", padding: "2px 8px" }}>{eCfg.label}</span>
-                                          <span className={`analysis-badge ${pCfg.cls}`} style={{ fontSize: "0.63rem", padding: "2px 8px" }}>{pCfg.label}</span>
-                                        </div>
+                                        {isClosing ? (
+                                          <span className="closing-card-label">Closing Message</span>
+                                        ) : (
+                                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                            <span className="suggestion-num">#{i + 1}</span>
+                                            <span className={`analysis-badge ${eCfg.cls}`} style={{ fontSize: "0.63rem", padding: "2px 8px" }}>{eCfg.label}</span>
+                                            <span className={`analysis-badge ${pCfg.cls}`} style={{ fontSize: "0.63rem", padding: "2px 8px" }}>{pCfg.label}</span>
+                                          </div>
+                                        )}
                                         <span className="suggestion-time">{new Date(s.created_at).toLocaleTimeString()}</span>
                                       </div>
 
                                       {/* Suggested reply — shown for every card */}
                                       {s.suggested_reply ? (
-                                        <div className="suggested-reply-card">
-                                          <p className="reply-label">💬 {isGreeting ? "Opening Greeting" : "Suggested Reply"}</p>
+                                        <div className={isClosing ? "closing-reply-card" : "suggested-reply-card"}>
+                                          <p className="reply-label">
+                                            {isClosing ? "🤝 Say to Customer" : isGreeting ? "💬 Opening Greeting" : "💬 Suggested Reply"}
+                                          </p>
                                           <p className="reply-text">{s.suggested_reply}</p>
                                         </div>
                                       ) : (Date.now() - new Date(s.created_at).getTime() > 30_000) ? (
@@ -1292,8 +1281,8 @@ export default function Dashboard() {
                                         <div className="reply-pending">Generating reply...</div>
                                       )}
 
-                                      {/* Intent + actions — only for the most recent suggestion */}
-                                      {isLatest && !isGreeting && (
+                                      {/* Intent + actions — only for the most recent non-special suggestion */}
+                                      {isLatest && !isGreeting && !isClosing && (
                                         <>
                                           <div className="intent-row">
                                             <span className="intent-label">Intent</span>
@@ -1317,29 +1306,6 @@ export default function Dashboard() {
                                     </div>
                                   );
                                 })}
-                              </div>
-                            )}
-
-                            {/* ── Closing Message ── */}
-                            {(closingMessage || closingLoading || (selectedCallData.status === "connected" && messages.length >= 2)) && (
-                              <div className="closing-message-section">
-                                <div className="closing-message-header">
-                                  <span className="closing-message-label">Closing Message</span>
-                                  {selectedCallData.status === "connected" && (
-                                    <button
-                                      className="closing-generate-btn"
-                                      onClick={() => fetchClosingMessage(selectedCall!)}
-                                      disabled={closingLoading}
-                                    >
-                                      {closingLoading ? "Generating…" : closingMessage ? "Regenerate" : "Generate"}
-                                    </button>
-                                  )}
-                                </div>
-                                {closingLoading && !closingMessage ? (
-                                  <div className="closing-message-loading">Generating closing message…</div>
-                                ) : closingMessage ? (
-                                  <p className="closing-message-text">{closingMessage}</p>
-                                ) : null}
                               </div>
                             )}
                           </>
