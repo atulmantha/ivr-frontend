@@ -256,6 +256,8 @@ export default function Dashboard() {
   const [recordings, setRecordings]         = useState<Recording[]>([]);
   const [recordingsLoading, setRecordingsLoading] = useState(false);
   const [callQueryAddressed, setCallQueryAddressed] = useState<Record<string, boolean>>({});
+  const [closingMessage, setClosingMessage]         = useState<string | null>(null);
+  const [closingLoading, setClosingLoading]         = useState(false);
 
   // Softphone
   const [callStatus, setCallStatus]         = useState<CallStatus>("idle");
@@ -408,6 +410,19 @@ export default function Dashboard() {
     }
   };
 
+  const fetchClosingMessage = async (callId: string) => {
+    setClosingLoading(true);
+    try {
+      const r = await fetch(`/api/closing-message?call_id=${callId}`);
+      if (r.ok) {
+        const { closing_message } = await r.json();
+        if (closing_message) setClosingMessage(closing_message);
+      }
+    } catch { /* non-critical */ } finally {
+      setClosingLoading(false);
+    }
+  };
+
   const fetchKbEntries = async () => {
     setKbEntriesLoading(true);
     setKbEntriesError(null);
@@ -443,11 +458,14 @@ export default function Dashboard() {
   }, [calls]);
 
   useEffect(() => {
+    setClosingMessage(null);
     if (!selectedCall) { setSuggestions([]); setMessages([]); setCallSummary(null); setRecordings([]); return; }
     fetchMessages(selectedCall);
     fetchSuggestions(selectedCall);
     fetchCallSummary(selectedCall);
     fetchRecordings(selectedCall);
+    const callStatus = calls.find((c) => c.id === selectedCall)?.status;
+    if (callStatus === "disconnected") fetchClosingMessage(selectedCall);
   }, [selectedCall]);
 
   useEffect(() => {
@@ -1299,6 +1317,29 @@ export default function Dashboard() {
                                     </div>
                                   );
                                 })}
+                              </div>
+                            )}
+
+                            {/* ── Closing Message ── */}
+                            {(closingMessage || closingLoading || (selectedCallData.status === "connected" && messages.length >= 2)) && (
+                              <div className="closing-message-section">
+                                <div className="closing-message-header">
+                                  <span className="closing-message-label">Closing Message</span>
+                                  {selectedCallData.status === "connected" && (
+                                    <button
+                                      className="closing-generate-btn"
+                                      onClick={() => fetchClosingMessage(selectedCall!)}
+                                      disabled={closingLoading}
+                                    >
+                                      {closingLoading ? "Generating…" : closingMessage ? "Regenerate" : "Generate"}
+                                    </button>
+                                  )}
+                                </div>
+                                {closingLoading && !closingMessage ? (
+                                  <div className="closing-message-loading">Generating closing message…</div>
+                                ) : closingMessage ? (
+                                  <p className="closing-message-text">{closingMessage}</p>
+                                ) : null}
                               </div>
                             )}
                           </>
