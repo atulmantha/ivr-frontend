@@ -648,6 +648,7 @@ export default function Dashboard() {
             call.reject();
             return;
           }
+          activeCallRef.current = call;
           call.accept();
           setCallStatus("connected");
           setActiveCall(call);
