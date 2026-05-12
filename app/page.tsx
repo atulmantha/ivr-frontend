@@ -630,7 +630,12 @@ export default function Dashboard() {
     let device: any = null;
     const init = async () => {
       try {
-        const r = await fetch("/api/token");
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        const tokenHeaders: HeadersInit = {};
+        if (authSession?.access_token) {
+          tokenHeaders["Authorization"] = `Bearer ${authSession.access_token}`;
+        }
+        const r = await fetch("/api/token", { headers: tokenHeaders });
         if (!r.ok) { console.warn("Token fetch failed."); return; }
         const { token, error } = await r.json();
         if (error || !token) { console.warn("No token."); return; }
