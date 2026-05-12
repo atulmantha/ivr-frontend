@@ -2115,61 +2115,36 @@ p {
   border-color: rgba(78, 167, 46, 0.2);
 }
 
-/* ── Closing message ── */
-.closing-message-section {
-  margin-top: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+/* ── Closing suggestion card ── */
+.suggestion-card.closing-card {
+  border-color: rgba(245, 158, 11, 0.35);
   background: linear-gradient(135deg, rgba(254, 243, 199, 0.9), rgba(255, 251, 235, 0.95));
-  padding: 14px 16px;
-  flex-shrink: 0;
 }
-.closing-message-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+.dark .suggestion-card.closing-card {
+  background: rgba(30, 18, 4, 0.9);
+  border-color: rgba(245, 158, 11, 0.25);
 }
-.closing-message-label {
+.closing-card-label {
   font-size: 0.7rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #92400e;
 }
-.closing-generate-btn {
-  font-size: 0.68rem;
-  font-weight: 600;
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(245, 158, 11, 0.5);
-  background: rgba(245, 158, 11, 0.12);
-  color: #92400e;
-  cursor: pointer;
-  transition: background 0.15s;
+.dark .closing-card-label { color: #fbbf24; }
+.closing-reply-card {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(254, 215, 120, 0.1));
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
 }
-.closing-generate-btn:hover:not(:disabled) { background: rgba(245, 158, 11, 0.22); }
-.closing-generate-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.closing-message-text {
-  font-size: 0.82rem;
-  line-height: 1.55;
-  color: #78350f;
-  margin: 0;
-}
-.closing-message-loading {
-  font-size: 0.78rem;
-  color: #a16207;
-  font-style: italic;
-}
-.dark .closing-message-section {
-  background: rgba(30, 20, 5, 0.85);
+.dark .closing-reply-card {
+  background: rgba(245, 158, 11, 0.1);
   border-color: rgba(245, 158, 11, 0.25);
 }
-.dark .closing-message-label { color: #fbbf24; }
-.dark .closing-generate-btn  { color: #fbbf24; border-color: rgba(245, 158, 11, 0.35); background: rgba(245, 158, 11, 0.1); }
-.dark .closing-generate-btn:hover:not(:disabled) { background: rgba(245, 158, 11, 0.2); }
-.dark .closing-message-text  { color: #fde68a; }
-.dark .closing-message-loading { color: #fbbf24; }
+.closing-reply-card .reply-text { color: #78350f; }
+.dark .closing-reply-card .reply-text { color: #fde68a; }
 
 .suggestion-card-header {
   display: flex;
