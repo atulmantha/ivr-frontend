@@ -2146,6 +2146,37 @@ p {
 .closing-reply-card .reply-text { color: #78350f; }
 .dark .closing-reply-card .reply-text { color: #fde68a; }
 
+/* ── Final farewell card ── */
+.suggestion-card.farewell-card {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.95), rgba(245, 248, 255, 0.98));
+}
+.dark .suggestion-card.farewell-card {
+  background: rgba(15, 15, 40, 0.9);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+.farewell-card-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #4338ca;
+}
+.dark .farewell-card-label { color: #a5b4fc; }
+.farewell-reply-card {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.08));
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+}
+.dark .farewell-reply-card {
+  background: rgba(99, 102, 241, 0.1);
+  border-color: rgba(99, 102, 241, 0.2);
+}
+.farewell-reply-card .reply-text { color: #3730a3; }
+.dark .farewell-reply-card .reply-text { color: #c7d2fe; }
+
 .suggestion-card-header {
   display: flex;
   align-items: center;
