@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to reach backend.";
+    console.error("[secure-notes GET] Backend unreachable:", message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
@@ -49,6 +50,14 @@ export async function POST(request: NextRequest) {
   let body: unknown = {};
   try { body = await request.json(); } catch { body = {}; }
 
+  const { call_id, raw_note } = body as Record<string, unknown>;
+  if (!call_id) {
+    return NextResponse.json({ error: "call_id is required." }, { status: 400 });
+  }
+  if (!raw_note || String(raw_note).trim() === "") {
+    return NextResponse.json({ error: "Note text cannot be empty." }, { status: 400 });
+  }
+
   try {
     const authHeader = request.headers.get("authorization");
     const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -61,9 +70,15 @@ export async function POST(request: NextRequest) {
     });
     let payload: unknown = {};
     try { payload = await response.json(); } catch { payload = {}; }
+
+    if (!response.ok) {
+      console.error(`[secure-notes POST] Backend returned ${response.status}:`, payload);
+    }
+
     return NextResponse.json(payload, { status: response.status });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to reach backend.";
+    console.error("[secure-notes POST] Backend unreachable:", message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
