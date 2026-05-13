@@ -1,5 +1,32 @@
 const express = require('express');
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+
+const NOTES_ENCRYPTION_KEY = process.env.NOTES_ENCRYPTION_KEY || '';
+const ENCRYPTION_KEY = NOTES_ENCRYPTION_KEY
+  ? crypto.createHash('sha256').update(NOTES_ENCRYPTION_KEY, 'utf8').digest()
+  : null;
+const ENCRYPTION_PREFIX = 'ENC:';
+const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+
+function encryptText(value) {
+  if (value == null || value === '') return value;
+  if (!ENCRYPTION_KEY) {
+    console.warn('[frontend encryption] NOTES_ENCRYPTION_KEY not set; storing plaintext fallback.');
+    return value;
+  }
+
+  try {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, ENCRYPTION_KEY, iv);
+    const encrypted = Buffer.concat([cipher.update(String(value), 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `${ENCRYPTION_PREFIX}${iv.toString('base64')}::${tag.toString('base64')}::${encrypted.toString('base64')}`;
+  } catch (err) {
+    console.error('[frontend encryption] encryptText failed:', err.message);
+    return value;
+  }
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -238,7 +265,12 @@ async function handleProcessWebhook(req, res) {
   if (userInput && callId) {
     supabase
       .from('messages')
-      .insert({ call_id: callId, role: 'user', content: userInput })
+      .insert({
+        call_id:           callId,
+        role:              'user',
+        content:           userInput,
+        content_encrypted: encryptText(userInput),
+      })
       .then(({ error }) => {
         if (error) console.error('Message insert error:', error.message);
       });
